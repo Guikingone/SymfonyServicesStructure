@@ -38,7 +38,7 @@ Well, if you look at this class, the logic behind is pretty simple, we inject so
 the injected class to write something into the logs.
 
 This class _can_ become a service into a classic Symfony application, in fact, Symfony **has** a logger service who
-write into the log, the so-called class 'logger' is available in Symfony via le DependencyInjection component, more in depth,
+write into the log, the so-called class 'logger' is available in Symfony via the DependencyInjection component, more in depth,
 via the class 'Logger' (who depend on the bridge with Monolog, the famous logger).
 
 Anyway, what the class we wrote is about ? Simply bring the write method into our application, not so much.
@@ -49,6 +49,7 @@ In a simple way using services.yml file (in the app/config folder) :
 
 ```yaml
 services:
+
     app.logwriter
         class: App\LogWriter
             arguments:
@@ -109,9 +110,9 @@ Here's what said the console :
  {
     public function indexAction()
     {
-        return $this->get('app.logger'->write();
+        return $this->get('app.logger')->write();
     }
-  }
+ }
 ```
 This controller call the service saved sooner and especially, the write method, this way, we don't need to allow PHP to
 save a variable into memory, this way, better performances !
