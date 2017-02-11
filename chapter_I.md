@@ -720,7 +720,6 @@ class EntityManager
         $this->request = $request;
     }
 
-    // This must return an array of all the articles stored into the BBD.
     public function getArticles()
     {
         return $this->doctrine->getRepository('AppBundle:Article')->getAllArticles();
@@ -787,7 +786,7 @@ use Symfony\Bundle\FrameworkBundle\Controller\Controller;
 
 class AppController extends Controller
 {
-    public function newArticleAction(Request $request)
+    public function newArticleAction()
     {
         $form = $this->get('app.entity_manager')->newArticle();
 
@@ -824,8 +823,8 @@ But, there's a single problem, we inject the request inside our service, that's 
 In fact, the request is a simple class in Symfony, like ... Well, like a class that you build, so,
 as you know the controller "manage" the request ... Wrong !
 
-The controller ISN`T the manager of the request, the kernel is, in fact,
-the HTTPKernel manager the request, response, exceptions,
+The controller ISN`T the manager of the request, the kernel is.
+In fact, the HTTPKernel manage the request, response, exceptions,
 controller and so on by dispatching "events" (we come on this later), this way, the router grab the request
 and analyse what's inside, this way, he call the ArgumentResolver to analyse the arguments passed through,
 after this, the ControllerResolver is called and find the controller linked to this request
@@ -833,13 +832,460 @@ after this, the ControllerResolver is called and find the controller linked to t
 again and this last one send a event call kernel.response (yes, very hard ...) in order to send the response
 returned from the controller.
 
-This way, the request isn`t linked to the controller, this last one is a simple 'point' on the road
+This way, the request isn't linked to the controller, this last one is a simple 'point' on the road
 of the request and he SHOULDN'T manage the request, in fact, it's our logic (aka services here) who need the
 request to perform something, this way, the request is passed directly to the services who need her
 and our application goes faster (yes, that's life changer isn't it !?) do to the fact that our request
-is "manage" and "solved" before even been manage by our Controller, this way, everything goes faster !
+is "manage" and "solved" before even been managed by our Controller, this way, everything goes faster !
 
 So, that was a simply way of explaining the hard process behind our logic, now, you have a manager who can
 CREATE and GET (aka find) a simple entity, let's build the UPDATE AND DELETE methods !
 
 # Case III - A manager should manage !
+
+Let's build something much bigger now, let's update and delete a entity using our manager !
+
+To start, let's add a updateArticle method :
+
+```php
+<?php
+
+namespace AppBundle\Managers;
+
+use Doctrine\ORM\EntityManager;
+
+// Entity
+use AppBundle\Entity\Article;
+
+class EntityManager
+{
+    /** @var EntityManager */
+    private $doctrine;
+
+    /** @var FormFactory */
+    private $form;
+
+    /** @var RequestStack */
+    private $request;
+
+    public function __construct(
+        EntityManager $doctrine,
+        FormFactory $form,
+        RequestStack $request
+    ) {
+        $this->doctrine = $doctrine;
+        $this->form = $form;
+        $this->request = $request;
+    }
+
+    public function getArticles()
+    {
+        return $this->doctrine->getRepository('AppBundle:Article')->getAllArticles();
+    }
+
+    public function newArticle()
+    {
+        $request = $this->request->getCurrentRequest->request->all();
+
+        $article = new Article();
+
+        $form = $this->form->create(ArticleType::class, $article);
+        $form->handleRequest($request);
+
+        if ($form->isSubmitted() && $form->isValid()) {
+            $this->doctrine->persist($article);
+            $this->doctrine->flush();
+        }
+
+        return $form;
+    }
+
+    public function updateArticle()
+    {
+        // TODO
+    }
+}
+```
+
+Ok, now, time to get serious !
+
+In order to update something, what do we need ?
+
+Well, as you know, Doctrine store the entity using all the attributes that we define in our class (aka Article),
+in order to find one, we can use his name but let's be clear, if we slug this last one, we should probably
+store the slug and find the entity by him, bad idea.
+
+To be faster, let's use the id, for example, our route could be define as follow :
+
+```yaml
+
+app_article_update:
+     path:    /article/update/{id}
+     methods: ['GET', 'POST'] // In order to be able to perform form processing.
+     defaults: { _controller: AppBundle:App:updateArticle
+     requirements:
+          id: \d+
+```
+
+Ok, we've defind the route, time to update our manager method :
+
+```php
+<?php
+
+namespace AppBundle\Managers;
+
+use Doctrine\ORM\EntityManager;
+
+// Entity
+use AppBundle\Entity\Article;
+
+class EntityManager
+{
+    /** @var EntityManager */
+    private $doctrine;
+
+    /** @var FormFactory */
+    private $form;
+
+    /** @var RequestStack */
+    private $request;
+
+    public function __construct(
+        EntityManager $doctrine,
+        FormFactory $form,
+        RequestStack $request
+    ) {
+        $this->doctrine = $doctrine;
+        $this->form = $form;
+        $this->request = $request;
+    }
+
+    public function getArticles()
+    {
+        return $this->doctrine->getRepository('AppBundle:Article')->getAllArticles();
+    }
+
+    public function newArticle()
+    {
+        $request = $this->request->getCurrentRequest->request->all();
+
+        $article = new Article();
+
+        $form = $this->form->create(ArticleType::class, $article);
+        $form->handleRequest($request);
+
+        if ($form->isSubmitted() && $form->isValid()) {
+            $this->doctrine->persist($article);
+            $this->doctrine->flush();
+        }
+
+        return $form;
+    }
+
+    public function updateArticle()
+    {
+        $id = $this->request->getCurrentRequest()->get('id');
+
+        $article = $this->doctrine->getRepository('AppBundle:Article')
+                                  ->findOneBy([
+                                    'id' => $id
+                                  ]);
+
+         // Let's process our entity !
+    }
+}
+```
+
+Now we getting serious, in fact, we simply build the process of retrieving a entity inside of our DBAL
+DataBase Abstract Layer) called Doctrine, this way, as soon as a id (define as a integer by the regular
+expression define in the route) is send through the request of the updateArticle method, we grab him
+and pass him to the findOneBy method of Doctrine, all this in order to retrieve a entity already saved
+in the BDD.
+
+Now, let's build the update process (form to the rescue !) :
+
+```php
+<?php
+
+namespace AppBundle\Managers;
+
+use Doctrine\ORM\EntityManager;
+
+// Entity
+use AppBundle\Entity\Article;
+
+class EntityManager
+{
+    /** @var EntityManager */
+    private $doctrine;
+
+    /** @var FormFactory */
+    private $form;
+
+    /** @var RequestStack */
+    private $request;
+
+    public function __construct(
+        EntityManager $doctrine,
+        FormFactory $form,
+        RequestStack $request
+    ) {
+        $this->doctrine = $doctrine;
+        $this->form = $form;
+        $this->request = $request;
+    }
+
+    public function getArticles()
+    {
+        return $this->doctrine->getRepository('AppBundle:Article')->getAllArticles();
+    }
+
+    public function newArticle()
+    {
+        $request = $this->request->getCurrentRequest->request->all();
+
+        $article = new Article();
+
+        $form = $this->form->create(ArticleType::class, $article);
+        $form->handleRequest($request);
+
+        if ($form->isSubmitted() && $form->isValid()) {
+            $this->doctrine->persist($article);
+            $this->doctrine->flush();
+        }
+
+        return $form;
+    }
+
+    public function updateArticle()
+    {
+        $id = $this->request->getCurrentRequest()->get('id');
+
+        $article = $this->doctrine->getRepository('AppBundle:Article')
+                                  ->findOneBy([
+                                    'id' => $id
+                                  ]);
+
+        $request = $this->request->getCurrentRequest()->request->all();
+
+        $form = $this->form->create(ArticleType::class, $article);
+        $form->handleRequest($request);
+
+        if ($form->isSubmitted && $form->isValid()) {
+            $this->doctrine->flush();
+        }
+
+        return $form;
+    }
+}
+```
+
+Alright, simple approach here, we grab the request (and all the data passed through her) and submit the
+new values in the form, once this one is valid and submitted, we flush the values (aka, update without
+saying to Doctrine : Hey, that's a entity, grab her ..., in fact, Doctrine already know that this entity
+is under his control, he help us find her so, things goes smoothly here) and return the form, normal case.
+
+As soon as this method is updated, let's update our controller :
+
+```php
+<?php
+
+namespace AppBundle\Controllers;
+
+use Symfony\Bundle\FrameworkBundle\Controller\Controller;
+
+class AppController extends Controller
+{
+    public function newArticleAction()
+    {
+        $form = $this->get('app.entity_manager')->newArticle();
+
+        return $this->render('yourview.html.twig', [
+            'form' => $form
+        ]);
+    }
+
+    public function updateArticleAction()
+    {
+        $form = $this->get('app.entity_manager')->updateArticle();
+
+        return $this->render('updateview.html.twig', [
+            'form' => $form
+        ]);
+    }
+}
+```
+Smoother controller lead to faster application and that's exactly what we've done here, our controller
+is under the 5-10-20 rules dictated by Symfony (for more informations, ['let's read the best practices
+book'](https://symfony.com/doc/current/best_practices/controllers.html))
+and the logic is managed inside our managers (sound really cool).
+
+Alright, now, let's build our delete method :
+
+```php
+<?php
+
+namespace AppBundle\Managers;
+
+use Doctrine\ORM\EntityManager;
+
+// Entity
+use AppBundle\Entity\Article;
+
+class EntityManager
+{
+    /** @var EntityManager */
+    private $doctrine;
+
+    /** @var FormFactory */
+    private $form;
+
+    /** @var RequestStack */
+    private $request;
+
+    public function __construct(
+        EntityManager $doctrine,
+        FormFactory $form,
+        RequestStack $request
+    ) {
+        $this->doctrine = $doctrine;
+        $this->form = $form;
+        $this->request = $request;
+    }
+
+    public function getArticles()
+    {
+        return $this->doctrine->getRepository('AppBundle:Article')->getAllArticles();
+    }
+
+    public function newArticle()
+    {
+        $request = $this->request->getCurrentRequest->request->all();
+
+        $article = new Article();
+
+        $form = $this->form->create(ArticleType::class, $article);
+        $form->handleRequest($request);
+
+        if ($form->isSubmitted() && $form->isValid()) {
+            $this->doctrine->persist($article);
+            $this->doctrine->flush();
+        }
+
+        return $form;
+    }
+
+    public function updateArticle()
+    {
+        $id = $this->request->getCurrentRequest()->get('id');
+
+        $article = $this->doctrine->getRepository('AppBundle:Article')
+                                  ->findOneBy([
+                                    'id' => $id
+                                  ]);
+
+        $request = $this->request->getCurrentRequest()->request->all();
+
+        $form = $this->form->create(ArticleType::class, $article);
+        $form->handleRequest($request);
+
+        if ($form->isSubmitted && $form->isValid()) {
+            $this->doctrine->flush();
+        }
+
+        return $form;
+    }
+
+    public function deleteAction()
+    {
+        $id = $this->request->getCurrentRequest->get('id');
+
+        $article = $this->doctrine->getRepository('AppBundle:Article')
+                                  ->findOneBy([
+                                    'id' => $id
+                                  ]);
+
+        if (is_object($article) && $article instanceOf Article) {
+            $this->doctrine->remove($article);
+            $this->doctrine->flush();
+        }
+    }
+}
+```
+
+Alright, nothing to complicate here, we grab the id from the request and find the entity linked,
+once it's done, we validate the object and the fact that he's a instance of the right class (optional but
+could help manage exceptions from Doctrine here), once it's validated, we remove the entity from Doctrine
+and flush in order to update the BDD, simple approach, normal case, fast process.
+
+Let's build our route :
+
+```yaml
+
+app_article_delete:
+     path:    /article/delete/{id}
+     methods: 'GET'
+     defaults: { _controller: AppBundle:App:deleteArticle
+     requirements:
+          id: \d+
+```
+
+And our controller :
+
+```php
+<?php
+
+namespace AppBundle\Controllers;
+
+use Symfony\Bundle\FrameworkBundle\Controller\Controller;
+
+class AppController extends Controller
+{
+    public function newArticleAction()
+    {
+        $form = $this->get('app.entity_manager')->newArticle();
+
+        return $this->render('yourview.html.twig', [
+            'form' => $form
+        ]);
+    }
+
+    public function updateArticleAction()
+    {
+        $form = $this->get('app.entity_manager')->updateArticle();
+
+        return $this->render('updateview.html.twig', [
+            'form' => $form
+        ]);
+    }
+
+    public function deleteArticleAction()
+    {
+        $this->get('app.entity_manager')->deleteArticle();
+
+        return $this->redirectToRoute('home');
+    }
+}
+```
+
+Here, we don't return any variable, we don't need to, we just delete something, if you have a 'flash message'
+to send (we gonna look at this later), no need too, he's gonna be send with the session.
+
+Once the delete phase is done, we redirect to the route where we need to be and life's good, job done.
+
+Alright, now, you know how to create a service, define him as a manager, build the CRUD method inside
+this last one and adapt your controller according to the manager, pretty solid skills that you have here,
+in fact, building a service doesn't require a lot of skill, juts some logic and a basic understanding of the
+request process in Symfony.
+
+As you may ask, how can i use a service to perform some bigger operations ? Like building a single API
+or even building a register process ?
+
+Well, very good question, for the moment, practice with the code and try to build things properly, in the next
+chapter, we gonna answer all this question and more, that's gonna be a interesting chapter !
+
+See you next time !
+
+Guillaume, brownie addict.
+
+
