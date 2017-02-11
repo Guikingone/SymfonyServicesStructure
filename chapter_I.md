@@ -248,6 +248,9 @@ class LoggerLoader implements
 }
 ```
 
+_Nota Bene : Please understand the the code under isn't pretty complete or valid, it's just build for
+presentation purpose._
+
 Now, let's update our first class :
 
 ```php
@@ -915,19 +918,19 @@ Well, as you know, Doctrine store the entity using all the attributes that we de
 in order to find one, we can use his name but let's be clear, if we slug this last one, we should probably
 store the slug and find the entity by him, bad idea.
 
-To be faster, let's use the id, for example, our route could be define as follow :
+To be faster, let's use the id, for example, our route could be defined as follow :
 
 ```yaml
 
 app_article_update:
      path:    /article/update/{id}
      methods: ['GET', 'POST'] // In order to be able to perform form processing.
-     defaults: { _controller: AppBundle:App:updateArticle
+     defaults: { _controller: AppBundle:App:updateArticle }
      requirements:
           id: \d+
 ```
 
-Ok, we've defind the route, time to update our manager method :
+Ok, we've defined the route, time to update our manager method :
 
 ```php
 <?php
@@ -997,8 +1000,8 @@ class EntityManager
 ```
 
 Now we getting serious, in fact, we simply build the process of retrieving a entity inside of our DBAL
-DataBase Abstract Layer) called Doctrine, this way, as soon as a id (define as a integer by the regular
-expression define in the route) is send through the request of the updateArticle method, we grab him
+(DataBase Abstract Layer) called Doctrine, this way, as soon as an id (define as a integer by the regular
+expression defined in the route) is send through the request of the updateArticle method, we grab him
 and pass him to the findOneBy method of Doctrine, all this in order to retrieve a entity already saved
 in the BDD.
 
@@ -1196,7 +1199,7 @@ class EntityManager
         return $form;
     }
 
-    public function deleteAction()
+    public function deleteArticle()
     {
         $id = $this->request->getCurrentRequest->get('id');
 
@@ -1225,7 +1228,7 @@ Let's build our route :
 app_article_delete:
      path:    /article/delete/{id}
      methods: 'GET'
-     defaults: { _controller: AppBundle:App:deleteArticle
+     defaults: { _controller: AppBundle:App:deleteArticle }
      requirements:
           id: \d+
 ```
