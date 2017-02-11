@@ -24,7 +24,7 @@ history.
 So, let's imagine we have a API running, in order to respect the rules
 of a modern API (REST, SOAP ... what's that ?), we need to have a 'structured'
 format for the response, today, an API can communicate with multiple format
-like JSON, XML and event HTML (yes, that could happen), in this example,
+like JSON, XML and even HTML (yes, that could happen), in this example,
 let's use JSON, probably our favorite format.
 
 To start, let's declare a new class inside a AppBundle\Managers\Api
@@ -122,6 +122,7 @@ Let's build a simple 'get a single article' method :
 
 namespace AppBundle\Managers\Api;
 
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;
 
 class ApiArticleManager
@@ -172,13 +173,13 @@ class ApiArticleManager
 
 Alright, what's new here ?
 
-In fact, nothing to dangerous, we simply find the article according to
+In fact, nothing too dangerous, we simply find the article according to
 the id send through the request, once the article is found, we return
 a JsonResponse who contains the proper headers and the resource
 (aka the article) and a simple message to validate the research.
 
-If the resource isn't found, we return a JsonResponse again bu the 404
-headers code.
+If the resource isn't found, we return a JsonResponse again
+but with the 404 headers code.
 
 Let's update our routes and controllers :
 
@@ -218,5 +219,191 @@ The key here is to understand that a response is always send and for
 the first time, it's not the controller directly who do this process,
 plus, we don't need to call a shortcut inside the controller, we simply
 inject the "components" that we need into our manager and that's all !
+
+Ok, now, time to get serious about entity management in a API,
+let's build a form process in order to save some data.
+
+## Case II - Processing is everything, process everywhere !
+
+Ok, let's be serious, we build a 'GET' method,
+we can find a single article but how can we add a new one ?
+In our manager, it was simple, we call the form and the client send the
+data but here, the client gonna fly around a frontend application
+(like VueJS, Angular ou even React ... Heck, don't like this one) and
+he don't gonna click on our form directly ... Hum, hard time.
+
+In fact, not so much, the main principal here is ... _logic sharing_
+
+Yeah, i know, sound strange but that's the truth,
+we gonna receive the data, don't show any form and cry if the data isn't
+what we expected (not so much on the last part), so, how build this thing ?
+
+Simply by using the same logic as earlier :
+
+```php
+<?php
+
+namespace AppBundle\Managers\Api;
+
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\JsonResponse;
+
+class ApiArticleManager
+{
+    /** @var EntityManager */
+    private $doctrine;
+
+    /** @var FormFactory */
+    private $form;
+
+    /** @var RequestStack */
+    private $request;
+
+    public function __construct(
+        EntityManager $doctrine,
+        FormFactory $form,
+        RequestStack $request
+    ) {
+        $this->doctrine = $doctrine;
+        $this->form = $form;
+        $this->request = $request;
+    }
+
+    public function getSingleArticle()
+    {
+        $id = $this->request->getCurrentRequest()->get('id');
+
+        $article = $this->doctrine->getRepository('AppBundle:Article')
+                                  ->findOneBy([
+                                    'id' => $id
+                                  ]);
+
+        if ($article) {
+            return new JsonResponse(
+                $article,
+                ['message' => 'Resource found.'],
+                Response::HTTP_OK
+            );
+        }
+
+        return new JsonResponse(
+            ['message' => 'Resource not found.'],
+            Response::HTTP_NOT_FOUND
+        );
+    }
+
+    public function postNewArticle()
+    {
+        $article = new Article();
+
+        // Grab the data passed through the request.
+        $data = $this->request->getCurrentRequest()->request->all();
+
+        $form = $this->form->create(ArticleType::class, $article, [
+            'csrf_protection' => false,
+        ]);
+        $form->submit($data);
+
+        if ($form->isSubmitted() && $form->isValid()) {
+            // Search if a equivalent resource has been created.
+            $data = $form->getData();
+            $trick = $this->doctrine->getRepository('AppBundle:Article')
+                                    ->findOneBy([
+                                        'name' => $data->getName(),
+                                    ]);
+
+            if ($article) {
+                return new JsonResponse(
+                    [
+                        'message' => 'Resource already found.',
+                        'name' => $article->getName()
+                    ],
+                    Response::HTTP_SEE_OTHER
+                );
+            }
+
+            $this->doctrine->persist($article);
+            $this->doctrine->flush();
+
+            return new JsonResponse(
+                [
+                    'message' => 'Resource created',
+                    'name' => $article->getName()
+                ],
+                Response::HTTP_CREATED
+            );
+        }
+
+        return new JsonResponse(
+            [
+                'message' => 'Form invalid',
+            ],
+            Response::HTTP_BAD_REQUEST
+        );
+    }
+}
+```
+
+Yay, that's what I like to see in my manager, clear and nice form
+processing, so what's the process here ?
+
+In fact, we do more than just creating a new article, for my concern,
+i'm not the one to blame, explanation :
+
+If we follow to HTTP protocol (boring and eyes-murderer document called
+the RFC ...) to the T, a post method can do|have multiple state, in fact,
+event if REST API (Application Programming Interface) has no state or
+SHOULDN'T have a state, the HTTP protocol say (and i listen to him) that
+we need to pass by X state in X methods to perform true HTTP actions.
+
+For the POST method, the protocol say that once the data is received and
+managed, we need to search if a similar resource was created before with
+the same attributes, if it's the case, we SHOULD redirect to this last one
+and show the attributes found.
+
+If no resources is found, we could create the resource using the data
+and return a 201 (CREATED) headers code with the 'representation' of the
+resource.
+
+Last case, if the data are invalid then we should return a 400 (BAD_REQUEST)
+headers code and a message showing the errors.
+
+Well, that's the theory and what we implement here, just for showing you
+the RIGHT way to do this but let's be clear, this example ISN'T complete,
+in fact, we don't return ALL the attributes so ... Well, don't take this
+for money maker.
+
+So, what the process here ?
+
+Simple things come with simple explanations ...
+
+First, we instantiate a new Entity, normal process, then,
+we create a new Form linked to this entity and we turn off the csrf_protection ...
+
+What ?!
+
+Yes, in the process of a API, the CSRF protection could be turned off,
+two main reasons, first, the client don't click on our form, he just send
+a HTTP request, no matter from where he came from, he need to be
+authenticated. Second point, the authentication is probably a abstract
+part in Symfony, here, we can use JWT for example and provide
+a API Token who's gonna log our user, simple, fast et effective.
+
+By turning off the CSRF protection, we gonna say to Symfony :
+
+_Hey dude, what's up ? I want to send you a POST request, can I ?_
+
+_Yes, for sure, show me your token ..._
+
+_Don't have any, can I ? I'm just here for a simple request ..._
+
+_So get out of my way little guy, i'm not a open API !_
+
+You saw the deal ...
+
+
+
+
+
 
 

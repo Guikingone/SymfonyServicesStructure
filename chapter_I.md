@@ -248,7 +248,7 @@ class LoggerLoader implements
 }
 ```
 
-_Nota Bene : Please understand the the code under isn't pretty complete or valid, it's just build for
+_Nota Bene : Please understand that the code under isn't pretty complete or valid, it's just build for
 presentation purpose._
 
 Now, let's update our first class :
@@ -1278,7 +1278,7 @@ Once the delete phase is done, we redirect to the route where we need to be and 
 
 Alright, now, you know how to create a service, define him as a manager, build the CRUD method inside
 this last one and adapt your controller according to the manager, pretty solid skills that you have here,
-in fact, building a service doesn't require a lot of skill, juts some logic and a basic understanding of the
+in fact, building a service doesn't require a lot of skill, just some logic and a basic understanding of the
 request process in Symfony.
 
 As you may ask, how can i use a service to perform some bigger operations ? Like building a single API
