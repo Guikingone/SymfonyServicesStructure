@@ -794,7 +794,7 @@ class AppController extends Controller
         $form = $this->get('app.entity_manager')->newArticle();
 
         return $this->render('yourview.html.twig', [
-            'form' => $form
+            'form' => $form->createView()
         ]);
     }
 }
@@ -1104,7 +1104,7 @@ class AppController extends Controller
         $form = $this->get('app.entity_manager')->newArticle();
 
         return $this->render('yourview.html.twig', [
-            'form' => $form
+            'form' => $form->createView()
         ]);
     }
 
@@ -1113,7 +1113,7 @@ class AppController extends Controller
         $form = $this->get('app.entity_manager')->updateArticle();
 
         return $this->render('updateview.html.twig', [
-            'form' => $form
+            'form' => $form->createView()
         ]);
     }
 }
@@ -1249,7 +1249,7 @@ class AppController extends Controller
         $form = $this->get('app.entity_manager')->newArticle();
 
         return $this->render('yourview.html.twig', [
-            'form' => $form
+            'form' => $form->createView()
         ]);
     }
 
@@ -1258,7 +1258,7 @@ class AppController extends Controller
         $form = $this->get('app.entity_manager')->updateArticle();
 
         return $this->render('updateview.html.twig', [
-            'form' => $form
+            'form' => $form->createView()
         ]);
     }
 

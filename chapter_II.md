@@ -401,6 +401,235 @@ _So get out of my way little guy, i'm not a open API !_
 
 You saw the deal ...
 
+In this chapter, we don't gonna manage the token validation or his presence in the
+request, we simply gonna build our manager, nothing more.
+
+Then, we submit the data in order to check if no resource can be found with
+the same name, if it's the case, we return the resource.
+If nothing is found and the form is valid, we can submit the value
+to the database and save them, good point.
+
+In the case of the form isn't valid, we return a response who say that the
+form isn't valid, captain obvious !
+
+Simple process here, this process respect the HTTP rules to the T and
+the REST principles to the single line, not to mention that every case is
+covered !
+
+Ok, let's build a method wo can manager the update of our resource :
+
+```php
+<?php
+
+namespace AppBundle\Managers\Api;
+
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\JsonResponse;
+
+class ApiArticleManager
+{
+    /** @var EntityManager */
+    private $doctrine;
+
+    /** @var FormFactory */
+    private $form;
+
+    /** @var RequestStack */
+    private $request;
+
+    public function __construct(
+        EntityManager $doctrine,
+        FormFactory $form,
+        RequestStack $request
+    ) {
+        $this->doctrine = $doctrine;
+        $this->form = $form;
+        $this->request = $request;
+    }
+
+    public function getSingleArticle()
+    {
+        $id = $this->request->getCurrentRequest()->get('id');
+
+        $article = $this->doctrine->getRepository('AppBundle:Article')
+                                  ->findOneBy([
+                                    'id' => $id
+                                  ]);
+
+        if ($article) {
+            return new JsonResponse(
+                $article,
+                ['message' => 'Resource found.'],
+                Response::HTTP_OK
+            );
+        }
+
+        return new JsonResponse(
+            ['message' => 'Resource not found.'],
+            Response::HTTP_NOT_FOUND
+        );
+    }
+
+    public function postNewArticle()
+    {
+        $article = new Article();
+
+        // Grab the data passed through the request.
+        $data = $this->request->getCurrentRequest()->request->all();
+
+        $form = $this->form->create(ArticleType::class, $article, [
+            'csrf_protection' => false,
+        ]);
+        $form->submit($data);
+
+        if ($form->isSubmitted() && $form->isValid()) {
+            // Search if a equivalent resource has been created.
+            $data = $form->getData();
+            $trick = $this->doctrine->getRepository('AppBundle:Article')
+                                    ->findOneBy([
+                                        'name' => $data->getName(),
+                                    ]);
+
+            if ($article) {
+                return new JsonResponse(
+                    [
+                        'message' => 'Resource already found.',
+                        'name' => $article->getName()
+                    ],
+                    Response::HTTP_SEE_OTHER
+                );
+            }
+
+            $this->doctrine->persist($article);
+            $this->doctrine->flush();
+
+            return new JsonResponse(
+                [
+                    'message' => 'Resource created',
+                    'name' => $article->getName()
+                ],
+                Response::HTTP_CREATED
+            );
+        }
+
+        return new JsonResponse(
+            [
+                'message' => 'Form invalid',
+            ],
+            Response::HTTP_BAD_REQUEST
+        );
+    }
+
+    public function putSingleTricks()
+    {
+        $id = $this->request->getCurrentRequest()->get('id');
+
+        $article = $this->doctrine->getRepository('AppBundle:Article')
+                                   ->findOneBy([
+                                       'id' => $id,
+                                   ]);
+
+        if (!$article) {
+            $article = new Article();
+
+            $data = $this->request->getCurrentRequest()->request->all();
+
+            $form = $this->form->create(ArticleType::class, $tricks, [
+                'csrf_protection' => false,
+            ]);
+            $form->submit($data);
+
+            if ($form->isSubmitted() && $form->isValid()) {
+                // Search if a equivalent resource has been created.
+                $object = $form->getData();
+                $article = $this->doctrine->getRepository('AppBundle:Article')
+                                          ->findOneBy([
+                                              'name' => $object->getName(),
+                                          ]);
+
+                if ($article) {
+                    return new JsonResponse(
+                        [
+                            'message' => 'Resource already found.',
+                            'name' => $article->getName()
+                        ],
+                        Response::HTTP_SEE_OTHER
+                    );
+                }
+
+                $this->doctrine->persist($article);
+                $this->doctrine->flush();
+
+                return new JsonResponse(
+                    [
+                        'message' => 'Resource created',
+                        'name' => $article->getName()
+                    ],
+                    Response::HTTP_CREATED
+                );
+            }
+        }
+
+        $data = $this->request->getCurrentRequest()->request->all();
+
+        $form = $this->form->create(ArticleType::class, $article, [
+            'csrf_protection' => false,
+        ]);
+        $form->submit($data);
+
+        if ($form->isSubmitted() && $form->isValid()) {
+            $this->doctrine->flush();
+
+            return new JsonResponse(
+                [
+                    'message' => 'Resource updated',
+                    'name' => $article->getName()
+                ],
+                Response::HTTP_OK
+            );
+        }
+
+        return new JsonResponse(
+            [
+                'message' => 'Resource not updated',
+            ],
+            Response::HTTP_NO_CONTENT
+        );
+    }
+}
+```
+
+Ok, that's a little bit more complex than before, first, let's explain the PUT
+method :
+
+- First, we need to grab the data passed through the request and find the
+resource linked to the data using his id, then, we need to check if a resource
+can be found using the id passed.
+
+- In the case that no resource can be found using the id, we need to create a new
+one using the informations passed through the request, that a other constraints of
+the PUT method, if no resource match, we need to create one.
+
+_As always, we check if the form is valid with the current data._
+
+- In the case of a resource created with the current data, we need to
+check if the resource isn't already persisted into the BDD, this point
+could be strange but it's always logic, the data passed through the
+request could contain 'keys' that already in the BDD (like the name
+for example), we need to be sure that only **one** resource contain the
+data in the BDD. If the form is valid, we send the resource to the BDD.
+
+- In the case that the resource exist and can't be found in the BDD, we
+grab the request data and update the resource with the data, simple story !
+
+_Nota bene : In this case, we take care that every 'input' of the form is send !_
+
+Alright random citizen ! Time to get serious !
+
+As you saw, we can update a whole resource using the data but how can we
+_update_ a single part of this resource ? How can we update just the name ?
+
+## Case III - I'm flying like a butterfly !
 
 
 
