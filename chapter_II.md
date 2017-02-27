@@ -631,8 +631,83 @@ _update_ a single part of this resource ? How can we update just the name ?
 
 ## Case III - I'm flying like a butterfly !
 
+Alright little butterfly, time to get serious, as you cas see from here,
+we've travel through a lot of things and I prefer to be clear, this is not
+enough !
 
+As you can see in the case II, our manager is responsible for the logic
+and even for the response part of the HTTP process, bad thing, I could
+say things with a more dedicated word :
 
+That's fucking ugly !
+
+And that's simple, a manager SHOULD not be responsible for the response
+process !
+
+**_But you say that our manager is our life ?!_**
+
+Yes, I say that but in fact, I wasn't complete with the explanation, for what it cost,
+your manager is your life but let's be clear, it's the life of an Entity !
+
+Yeah, I know, that's a different story that I told you earlier but let's be clear,
+a manager is linked to an entity and not to the HTTP process, he could
+access to this last one but his primary goal is to manage a entity !
+
+Our goal is to manage the HTTP process AROUND the manager, not INSIDE !
+
+In order to respect this logic, we gonna use the ADR pattern, this pattern
+can be used in Symfony with a little cost and can improve your code
+quality.
+
+In order to do this, let's a new class called AticleGetResponder :
+
+```php
+<?php
+
+namespace AppBundle\Responders\Api
+
+class ArticleGetResponder
+{
+
+}
+```
+
+Ok, right, that's a good starting point.
+
+For what it cost, what's the goal of a responder ?
+
+As say in the markdown document who describe the pattern, the responder
+is responsible for returning a response and handling the data
+passed from the action (here, that's our manager, we gonna update this one
+soon).
+
+So, what do we need to do this magic ?
+
+Let's start by adding a JsonResponse class (let's say we use Angular in frontend
+and we expect JSON data) and we need to be prepare for JSON hacking :
+
+```php
+<?php
+
+namespace AppBundle\Responders\Api
+
+class ArticleGetResponder
+{
+    public function __invoke($message, $data, $httpCode)
+    {
+        return new JsonResponse(
+            [
+                'message' => $message,
+                $data,
+                $httpCode
+            ]
+        );
+    }
+
+}
+```
+
+Ok, that's more detailed.
 
 
 
