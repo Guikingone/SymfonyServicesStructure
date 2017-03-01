@@ -659,7 +659,7 @@ In order to respect this logic, we gonna use the ADR pattern, this pattern
 can be used in Symfony with a little cost and can improve your code
 quality.
 
-In order to do this, let's a new class called AticleGetResponder :
+In order to do this, let's a new class called ArticleGetResponder :
 
 ```php
 <?php
@@ -693,7 +693,7 @@ namespace AppBundle\Responders\Api
 
 class ArticleGetResponder
 {
-    public function __invoke($message, $data, $httpCode)
+    public function __invoke(string $message, $data, int $httpCode)
     {
         return new JsonResponse(
             [
@@ -709,5 +709,160 @@ class ArticleGetResponder
 
 Ok, that's more detailed.
 
+What the role of this class ? Simply, we gonna grab the data passed from the manager,
+the message (aka resource created, found, etc ...) and the HTTPCode (for returning a clean
+response).
 
+You can see that I don't wat to have any JSON attack, so I encapsulate the data into an array.
 
+Once this is done, let's add this class as a service into our services.yml :
+
+```yaml
+services:
+
+    api.article_manager
+        class: AppBundle\Managers\Api\ApiArticleManager
+            arguments:
+                - '@doctrine.orm.entity_manager'
+                - '@form.factory'
+                - '@request_stack'
+
+    api.responder:
+        class: AppBundle\Responders\Api\ArticleGetResponder
+        public: false
+```
+
+Alright, that's what we like, proper service declarations ...
+The false value on the public key is the ultimate approach for services, in fact,
+in Symfony, every services is public, this mean that you can access every services from the
+controller with the call $this->get('your.service'), this approach is good but Symfony
+should be fast and by defining our service as private (aka public = false),
+we tell the ContainerBuilder to never instantiate the service from the controller, in fact,
+the ContainerBuilder gonna instantiate the service ONLY if the call come from
+an other service, not more, this way, our application goes faster and smoother.
+
+Alright, time to update our manager.
+
+```php
+<?php
+
+namespace AppBundle\Managers\Api;
+
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\JsonResponse;
+
+use AppBundle\Responders\Api\ArticleGetResponder;
+
+class ApiArticleManager
+{
+    /** @var EntityManager */
+    private $doctrine;
+
+    /** @var FormFactory */
+    private $form;
+
+    /** @var RequestStack */
+    private $request;
+
+    /** @var ArticleGetResponder */
+    private $responder;
+
+    public function __construct(
+        EntityManager $doctrine,
+        FormFactory $form,
+        RequestStack $request,
+        ArticleGetResponder $responder
+    ) {
+        $this->doctrine = $doctrine;
+        $this->form = $form;
+        $this->request = $request;
+        $this->responder = $responder;
+    }
+
+    // existing code
+}
+```
+
+Time to get serious ! Here, we inject the responder into our class and
+save the variable to be this last one once we call her. From here, you can
+say :
+
+'Hey, that's cool, how can we return the value from the responder ?'
+
+Lonely soul ...
+
+Let's update our first method :
+
+```php
+<?php
+
+namespace AppBundle\Managers\Api;
+
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\JsonResponse;
+
+use AppBundle\Responders\Api\ArticleGetResponder;
+
+class ApiArticleManager
+{
+    /** @var EntityManager */
+    private $doctrine;
+
+    /** @var FormFactory */
+    private $form;
+
+    /** @var RequestStack */
+    private $request;
+
+    /** @var ArticleGetResponder */
+    private $responder;
+
+    public function __construct(
+        EntityManager $doctrine,
+        FormFactory $form,
+        RequestStack $request,
+        ArticleGetResponder $responder
+    ) {
+        $this->doctrine = $doctrine;
+        $this->form = $form;
+        $this->request = $request;
+        $this->responder = $responder;
+    }
+
+    public function getSingleArticle()
+    {
+        $id = $this->request->getCurrentRequest()->get('id');
+
+        $article = $this->doctrine->getRepository('AppBundle:Article')
+                                  ->findOneBy([
+                                    'id' => $id
+                                  ]);
+
+        if ($article) {
+            $responder = $this->responder;
+            return $responder(
+                'Resource found',
+                $article,
+                Response::HTTP_OK
+            );
+        }
+    }
+
+    // existing code.
+}
+```
+
+Here, there's some modifications from the last part, first, we call the responder in oder
+to return the value, second, we don't return any value for the data if we don't find anything ...
+Strange part.
+
+In fact, not so many, in the RFC (you know, the eye murderer documents), the GET
+method SHOULD be idempotent, yeah, i know, strange word for a strange logic.
+
+Idempotent is like the 'mirror' effect of the water, his state never change, for our case,
+the GET response SHOULD return the same thing over and over, yeah, i know, strange logic but hey that's not mine.
+
+Problem is, we need to instantiate the responder then call the instance in order
+to return some values, bad idea for performances.
+
+In order to get rid of this sick logic, let's update our responder :
